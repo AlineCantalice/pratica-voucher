@@ -1,58 +1,91 @@
-import { jest } from "@jest/globals"; 
 import voucherService from "../../src/services/voucherService";
 import voucherRepository from "../../src/repositories/voucherRepository";
-import { Voucher } from "@prisma/client";
+import { faker } from "@faker-js/faker";
+import { jest } from "@jest/globals";
 
+describe("test create voucher", () => {
 
-describe("voucher unit test suite", () => {
-  it("creates a voucher given valid data", async () => {
-    jest.spyOn(voucherRepository, "getVoucherByCode").mockResolvedValueOnce(null);
+    jest.spyOn(
+        voucherRepository,
+        "getVoucherByCode"
+    ).mockImplementationOnce(() => null);
+    jest.spyOn(voucherRepository, "createVoucher").mockImplementationOnce(
+        (code, discount) => {
+            return null;
+        }
+    );
 
-    jest.spyOn(voucherRepository, "createVoucher").mockResolvedValueOnce(null);
+    it("test create item with success", async () => {
+        const voucher = {
+            code: faker.random.alphaNumeric(10),
+            discount: 89,
+        };
+        await voucherService.createVoucher(voucher.code, voucher.discount);
+    });
 
-    const newVoucher = {
-      code: "0123456789ABCDEF",
-      discount: 20,
-    };    
-    await voucherService.createVoucher(newVoucher.code, newVoucher.discount);
+    jest.spyOn(
+        voucherRepository,
+        "getVoucherByCode"
+    ).mockImplementationOnce((code): any => {
+        return { code, discount: 10 };
+    });
+
+    it("test create voucher that already exists, conflict", async () => {
+        const voucher = {
+            code: faker.random.alphaNumeric(10),
+            discount: 89,
+        };
+        try {
+            await voucherService.createVoucher(
+                voucher.code,
+                voucher.discount
+            );
+            fail();
+        } catch (e) {
+            expect(e.type).toBe("conflict");
+        }
+    });
+});
+
+describe("test get voucher", () => {
+    jest.spyOn(
+        voucherRepository,
+        "getVoucherByCode"
+    ).mockImplementationOnce((code): any => null);
+
+    it("Test get voucher that does not exist", async () => {
+        try {
+            await voucherService.applyVoucher("1212", 65);
+            fail();
+        } catch (err) {
+            expect(err.type).toBe("conflict");
+        }
+    });
+
+    jest.spyOn(
+        voucherRepository,
+        "getVoucherByCode"
+    ).mockImplementationOnce((code): any => ({
+        code,
+        discount: 10,
+        used: false,
+    }));
+    jest.spyOn(voucherRepository, "useVoucher").mockImplementationOnce(
+        (code): any => null
+    );
+
+    it("test exist voucher but did not use the code", async () => {
+        try {
+            const amount = 100;
+            const voucher = await voucherService.applyVoucher("1", amount);
+            expect(voucher.amount).toBe(amount);
+            expect(voucher.discount).toBe(10);
+            expect(voucher.applied).toBe(true);
+            expect(voucher.finalAmount).toBe(amount - (amount * 10) / 100);
+        } catch (err) {
+            console.log(err);
+            fail();
+        }
+    });
     
-    expect(voucherRepository.createVoucher).toBeCalledTimes(1);
-  });
-
-  it("throws error when trying to add a duplicated voucher", async() => {
-    const mockVoucher : Voucher = {
-      id: 99,
-      code: "voucher99code",
-      discount: 19,
-      used: false,
-    };
-    
-    jest.spyOn(voucherRepository, "getVoucherByCode").mockResolvedValueOnce(mockVoucher);
-    
-    try {
-      await voucherService.createVoucher(mockVoucher.code, mockVoucher.discount);
-    } catch (error) {      
-      expect(error.type).toBe("conflict");
-      expect(error.message).toEqual("Voucher already exist.");
-    }
-  });
-
-  it("throws error when trying to apply a voucher that does not exist", async() => {
-    const mockApplyVoucher = {
-      code: "apply_voucher_code",
-      amount: 100,
-    }
-
-    jest.spyOn(voucherRepository, "getVoucherByCode").mockResolvedValueOnce(null);
-
-    try {
-      await voucherService.applyVoucher(mockApplyVoucher.code, mockApplyVoucher.amount);
-    } catch (error) {      
-      expect(error.type).toBe("conflict");
-      expect(error.message).toEqual("Voucher does not exist.");
-    }
-
-    
-  });
-
 });
